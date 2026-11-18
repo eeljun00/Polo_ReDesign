@@ -96,9 +96,9 @@ const panels = {
  language(){open('<h2 id="dialog-title">국가 및 언어</h2><div class="language-options"><label for="country">배송지</label><select id="country"><option>대한민국</option></select><label for="locale">언어</label><select id="locale"><option>한국어</option></select></div><button class="solid-button" data-confirm-language>확인</button>');},
  collection(){open('<h2 id="dialog-title">New In</h2><p>새롭게 만나는 클래식, 폴로 랄프 로렌의 시즈널 아이템.</p><div class="search-results"></div>');renderSearch();},
  custom(){showProduct(13);},
- story(){info('World of Ralph Lauren','미국적인 헤리티지와 시대를 초월한 우아함.\n1967년부터 이어온 랄프 로렌의 세계를 만나보세요.','f96a8.png');},
+ story(){info('World of Ralph Lauren','미국 역사와 시대를 초월한 우아한 분위기,\n1967년부터 이어온 랄프로렌의 세계를 만나보세요.','f96a8.png');},
  fall(){$('.collection-grid').scrollIntoView({behavior:motionPreference.matches?'instant':'smooth',block:'start'});},
- living(){info('The Art of Living','의류를 넘어 당신의 일상 가장 가까운 곳으로.\n랄프 로렌이 제안하는 삶의 양식을 만나보세요.','2b154.png');},
+ living(){info('The Art of Living','당신의 일상과 가장 가까운 곳,\n랄프로렌이 제안하는 삶의 방식을 만나보세요.','2b154.png');},
  stores(){info('매장 찾기','가까운 매장을 찾아 폴로만의 특별한 스타일링 서비스를 경험하세요.\n공식 사이트에서 지역별 매장 정보와 운영 시간을 확인하실 수 있습니다.','bee15.png');}
 };
 $('.dialog-close').addEventListener('click',()=>dialog.close());
@@ -130,7 +130,7 @@ document.addEventListener('click',event=>{
   $('.shirt-preview>img').alt='커스텀 핏 옥스포드 셔츠, '+el.dataset.color+' 자수';
   return;
  }
- if(el.dataset.customType){$$('.custom-tabs button').forEach(button=>{const selected=button===el;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));});return;}
+ if(el.dataset.customType){$$('.custom-tabs button').forEach(button=>{const selected=button===el;button.classList.toggle('active',selected);button.classList.remove('is-selecting');button.setAttribute('aria-pressed',String(selected));});void el.offsetWidth;el.classList.add('is-selecting');return;}
  if(el.hasAttribute('data-save')){const i=Number(el.dataset.save);favorites.add(i);el.textContent='위시리스트에 저장됨';notify('위시리스트에 저장했습니다.');return;}
  if(el.hasAttribute('data-add')){const i=Number(el.dataset.add);bag.set(i,(bag.get(i)||0)+1);updateBag();notify('쇼핑백에 담았습니다.');return;}
  if(el.hasAttribute('data-remove')){const i=Number(el.dataset.remove);el.dataset.kind==='favorites'?favorites.delete(i):bag.delete(i);updateBag();saved(el.dataset.kind);return;}
@@ -163,6 +163,30 @@ window.addEventListener('scroll',()=>{if(!livingCursor.classList.contains('is-vi
 livingRail.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0){dragStart={x:e.clientX,scroll:livingRail.scrollLeft};dragged=false;livingRail.classList.add('is-dragging');}});
 window.addEventListener('pointerup',()=>{dragStart=null;livingRail.classList.remove('is-dragging');});
 livingRail.addEventListener('click',e=>{if(dragged){e.preventDefault();e.stopImmediatePropagation();dragged=false;}},true);
+
+// Turn downward wheel movement into smooth rightward browsing until the last image.
+let livingWheelFrame=0,livingWheelTarget=0,livingWheelPosition=0,livingWheelTime=0;
+function stopLivingWheel(){cancelAnimationFrame(livingWheelFrame);livingWheelFrame=0;livingRail.classList.remove('is-wheel-scrolling');}
+function moveLivingWheel(time){
+ const elapsed=Math.min(40,time-livingWheelTime||16);livingWheelTime=time;
+ const distance=livingWheelTarget-livingWheelPosition;
+ if(Math.abs(distance)<.8){livingRail.scrollLeft=livingWheelTarget;stopLivingWheel();return;}
+ livingWheelPosition+=distance*(1-Math.exp(-elapsed/110));livingRail.scrollLeft=livingWheelPosition;livingWheelFrame=requestAnimationFrame(moveLivingWheel);
+}
+livingRail.addEventListener('wheel',event=>{
+ if(event.ctrlKey||event.shiftKey||dialog.open||Math.abs(event.deltaX)>Math.abs(event.deltaY))return;
+ if(event.deltaY<=0){stopLivingWheel();return;}
+ const max=livingRail.scrollWidth-livingRail.clientWidth;
+ if(max<=0||(!livingWheelFrame&&livingRail.scrollLeft>=max-1))return;
+ event.preventDefault();cancelWheel();
+ const amount=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?innerWidth:1);
+ if(!livingWheelFrame){livingWheelPosition=livingWheelTarget=livingRail.scrollLeft;livingWheelTime=performance.now();livingRail.classList.add('is-wheel-scrolling');}
+ livingWheelTarget=Math.min(max,livingWheelTarget+amount);
+ if(motionPreference.matches){livingRail.scrollLeft=livingWheelTarget;stopLivingWheel();}
+ else if(!livingWheelFrame)livingWheelFrame=requestAnimationFrame(moveLivingWheel);
+},{passive:false});
+livingRail.addEventListener('pointerdown',stopLivingWheel);livingRail.addEventListener('touchstart',stopLivingWheel,{passive:true});livingRail.addEventListener('keydown',stopLivingWheel);window.addEventListener('resize',stopLivingWheel);
+
 // Duplicate the men's complete set for an uninterrupted automatic loop.
 const winterRail=$('.winter-rail');
 const winterRunner=document.createElement('div');winterRunner.className='winter-runner';
@@ -210,13 +234,27 @@ experienceGrid.addEventListener('pointerup',e=>{if(!experienceStart)return;const
 experienceGrid.addEventListener('pointercancel',()=>{experienceStart=null;});
 experienceGrid.addEventListener('click',e=>{if(experienceDragged){e.preventDefault();e.stopImmediatePropagation();experienceDragged=false;}},true);
 // Mouse wheel and trackpad browse two cards, then release vertical page scrolling.
-let experienceWheelDirection=0,experienceWheelCount=0,experienceWheelLast=0,experienceWheelAmount=0;
+let experienceWheelDirection=0,experienceWheelCount=0,experienceWheelLast=0,experienceWheelAmount=0,experienceAlignLast=0;
 experienceGrid.addEventListener('wheel',event=>{
  if(event.ctrlKey||dialog.open)return;
  const horizontal=Math.abs(event.deltaX)>Math.abs(event.deltaY)||event.shiftKey;
  const delta=horizontal?(event.deltaX||event.deltaY):event.deltaY;
  if(!delta)return;
  const direction=Math.sign(delta),now=performance.now();
+ // Do not move the cards until the section is centered below the header.
+ const section=$('.experience'),rect=section.getBoundingClientRect(),headerHeight=header.getBoundingClientRect().height;
+ const target=rect.top+scrollY+rect.height/2-(headerHeight+innerHeight)/2,distance=target-scrollY;
+ if(horizontal&&Math.abs(distance)>20)return;
+ if(!horizontal){
+  if(Math.abs(distance)>20){
+   if(!motionPreference.matches&&Math.sign(distance)===direction&&Math.abs(distance)<=Math.max(150,Math.abs(delta)*2)){
+    event.preventDefault();experienceAlignLast=now;
+    if(!wheelFrame||Math.abs(wheelTarget-target)>1){cancelWheel();wheelPosition=scrollY;wheelTarget=target;wheelTime=now;wheelFrame=requestAnimationFrame(smoothWheelFrame);}
+   }
+   return;
+  }
+  if(experienceAlignLast&&now-experienceAlignLast<220){event.preventDefault();experienceAlignLast=now;return;}
+ }
  if(direction!==experienceWheelDirection){experienceWheelDirection=direction;experienceWheelCount=0;experienceWheelAmount=0;experienceWheelLast=0;}
  if(!horizontal&&experienceWheelCount>=2){if(now-experienceWheelLast<800)event.preventDefault();return;}
  event.preventDefault();cancelWheel();
@@ -226,7 +264,7 @@ experienceGrid.addEventListener('wheel',event=>{
  experienceWheelAmount=0;experienceWheelLast=now;if(!horizontal)experienceWheelCount++;
  $(direction>0?'.experience-next':'.experience-prev').click();
 },{passive:false});
-experienceGrid.addEventListener('pointerleave',()=>{experienceWheelDirection=0;experienceWheelCount=0;experienceWheelAmount=0;experienceWheelLast=0;});
+experienceGrid.addEventListener('pointerleave',()=>{experienceWheelDirection=0;experienceWheelCount=0;experienceWheelAmount=0;experienceWheelLast=0;experienceAlignLast=0;});
 window.addEventListener('scroll',()=>{if(experienceCursor.classList.contains('is-visible')&&!experienceGrid.contains(document.elementFromPoint(parseFloat(experienceCursor.style.left),parseFloat(experienceCursor.style.top))))experienceCursor.classList.remove('is-visible');},{passive:true,capture:true});
 // Accumulate wheel movement while the New In rail is still moving.
 const newSection=$('.new-in'),productRail=$('.product-track');
@@ -238,7 +276,7 @@ productRail.addEventListener('pointerdown',event=>{if(event.pointerType==='mouse
 window.addEventListener('pointerup',()=>{productDrag=null;});
 productRail.addEventListener('pointerleave',()=>{productCursor.classList.remove('is-visible');productDrag=null;});
 window.addEventListener('scroll',()=>{if(productCursor.classList.contains('is-visible')&&!productRail.contains(document.elementFromPoint(parseFloat(productCursor.style.left),parseFloat(productCursor.style.top))))productCursor.classList.remove('is-visible');},{passive:true});
-let productFrame=0,productTarget=0,productPosition=0,productTime=0,lastProductWheelTime=0;
+let productFrame=0,productTarget=0,productPosition=0,productTime=0;
 function stopProductWheel(){cancelAnimationFrame(productFrame);productFrame=0;productRail.classList.remove('is-wheel-scrolling');}
 function moveProductWheel(time){
  const elapsed=Math.min(40,time-productTime||16);productTime=time;
@@ -250,9 +288,15 @@ newSection.addEventListener('wheel',event=>{
  if(event.ctrlKey||event.shiftKey||Math.abs(event.deltaX)>Math.abs(event.deltaY))return;
  if(event.deltaY<=0){stopProductWheel();return;}
  const max=Math.max(0,productRail.scrollWidth-productRail.clientWidth);
- const now=performance.now();
- if(!productFrame&&productRail.scrollLeft>=max-1){const isMomentum=now-lastProductWheelTime<180;lastProductWheelTime=now;if(isMomentum)event.preventDefault();return;}
- lastProductWheelTime=now;
+ if(max<=1)return;
+ if(productRail.scrollLeft>=max-1){
+  const target=$('.custom').getBoundingClientRect().top+scrollY-header.getBoundingClientRect().height;
+  if(target<=scrollY+2)return;
+  event.preventDefault();stopProductWheel();productRail.scrollLeft=max;
+  if(motionPreference.matches){cancelWheel();window.scrollTo({top:target,behavior:'instant'});}
+  else if(!wheelFrame||Math.abs(wheelTarget-target)>1){cancelWheel();wheelPosition=scrollY;wheelTarget=target;wheelTime=performance.now();wheelFrame=requestAnimationFrame(smoothWheelFrame);}
+  return;
+ }
  event.preventDefault();
  if(!motionPreference.matches){
   const top=newSection.getBoundingClientRect().top+scrollY-header.getBoundingClientRect().height-8;
